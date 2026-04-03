@@ -509,7 +509,7 @@ def main():
     sun = Planet(0, 0, 18, YELLOW, 1.98892e30, "Sun")
     sun.sun = True
 
-        specs = [
+    specs = [
     # name, a (AU), e, vis_r, color, mass, extra_parameters
     ("Mercury",      0.387,     0.2056,     5,    DARK_GREY,       3.30e23,   {}),
     ("Venus",        0.723,     0.0067,     9,    GOLDEN_BROWN,    4.87e24,   dict(has_atm=True, atm_color=(210,170,40))),
