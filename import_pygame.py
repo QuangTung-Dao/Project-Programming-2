@@ -9,19 +9,22 @@ WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Solar System Simulation")
 
 # Colors
-WHITE       = (255, 255, 255)
-YELLOW      = (255, 220,  50)
-BLUE        = (100, 149, 237)
-RED         = (188,  39,  50)
-DARK_GREY   = (140, 135, 130)
-LIGHT_BLUE  = (173, 216, 230)
-DEEP_BLUE   = ( 63,  84, 186)
-BLACK       = (  0,   0,   0)
-SUN_CORE    = (255, 250, 180)
-SUN_MID     = (255, 200,  60)
-SUN_GLOW    = (255, 140,   0)
-CYAN        = (  0, 255, 255)
-GOLD        = (255, 215,   0)
+BLACK        = (  0,   0,   0)
+BLUE         = (100, 149, 237)
+CYAN         = (  0, 255, 255)
+DARK_GREY    = (140, 135, 130)
+DARK_SAND    = (210, 160, 100)
+DEEP_BLUE    = ( 63,  84, 186)
+GOLD         = (255, 215,   0)
+GOLDEN_BROWN = (200, 165,  75)
+LIGHT_BLUE   = (173, 216, 230)
+RED          = (188,  39,  50)
+SUN_CORE     = (255, 250, 180)
+SUN_GLOW     = (255, 140,   0)
+SUN_MID      = (255, 200,  60)
+TAN          = (215, 195, 140)
+WHITE        = (255, 255, 255)
+YELLOW       = (255, 220,  50)
 
 FONT_SMALL  = pygame.font.SysFont("consolas", 13)
 FONT_MED    = pygame.font.SysFont("consolas", 15, bold=True)
@@ -152,6 +155,7 @@ class Planet:
         self.y_vel     = 0.0
         self.speed     = 0.0
         self.days      = 0
+        self.time_elapsed_seconds = 0
 
     def screen_r(self, cam):
         return max(3, int(self.vis_r * min(cam.zoom, 5) ** 0.45))
@@ -223,34 +227,97 @@ class Planet:
         ls = FONT_MED.render("Sun", True, GOLD)
         win.blit(ls, (sx - ls.get_width()//2, sy + r + 5))
 
-    def attraction(self, other):
-        dx   = other.x - self.x
-        dy   = other.y - self.y
-        dist = math.sqrt(dx*dx + dy*dy)
-        if other.sun:
-            self.dist_sun = dist
-        f     = G * self.mass * other.mass / dist**2
-        theta = math.atan2(dy, dx)
-        return math.cos(theta)*f, math.sin(theta)*f
-
     def update(self, planets):
         fx = fy = 0
         for p in planets:
             if p is self:
                 continue
-            dfx, dfy = self.attraction(p)
-            fx += dfx
-            fy += dfy
+        
+            # Tính lực hấp dẫn Newton: F = G*m1*m2 / r^2
+            dx = p.x - self.x
+            dy = p.y - self.y
+            dist_sq = dx*dx + dy*dy
+            dist = math.sqrt(dist_sq)
+        
+            if p.sun: self.dist_sun = dist
+            
+            force = G * self.mass * p.mass / dist_sq
+            theta = math.atan2(dy, dx)
+            fx += math.cos(theta) * force
+            fy += math.sin(theta) * force
+    
+        # Cập nhật vận tốc và vị trí (Euler-Cromer)
         self.x_vel += fx / self.mass * TIMESTEP
         self.y_vel += fy / self.mass * TIMESTEP
         self.speed  = math.sqrt(self.x_vel**2 + self.y_vel**2)
-        self.x     += self.x_vel * TIMESTEP
-        self.y     += self.y_vel * TIMESTEP
+        self.x += self.x_vel * TIMESTEP
+        self.y += self.y_vel * TIMESTEP
+    
+        # Lưu quỹ đạo (giới hạn để tránh lag)
+        # Quỹ đạo tuyệt đối
         self.orbit.append((self.x, self.y))
-        if len(self.orbit) > 900:
+        if len(self.orbit) > 900: 
             self.orbit.pop(0)
-        self.days += 1
+    
+        self.time_elapsed_seconds += TIMESTEP
+        self.days = int(self.time_elapsed_seconds / 86400)
 
+# ── SHOOTING STAR───────────────────────────────────────────────────────────────
+
+class ShootingStar:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        # Xuất hiện ngẫu nhiên ở nửa trên/phải màn hình
+        self.x = random.randint(WIDTH, WIDTH + 200)
+        self.y = random.randint(-200, HEIGHT)
+        # Vận tốc nhanh và chéo
+        self.vx = random.uniform(-20, -10) 
+        self.vy = random.uniform(7, 15)
+        self.active = False
+        self.timer = random.randint(100, 200) 
+        # Độ dài vệt sáng (số phân đoạn đuôi)
+        self.segments = 15 
+
+    def update(self):
+        if not self.active:
+            self.timer -= 1
+            if self.timer <= 0:
+                self.active = True
+            return
+
+        self.x += self.vx
+        self.y += self.vy
+
+        if self.x < -500 or self.y > HEIGHT + 500:
+            self.reset()
+
+    def draw(self, win):
+        if not self.active: return
+        
+        # Vẽ đuôi mờ dần bằng cách lặp ngược từ cuối đuôi về đầu
+        for i in range(self.segments):
+            # Tỷ lệ mờ: đoạn càng xa đầu sao băng càng mờ (xem xét nên giảm tuyến tính hay hàm mũ)
+            #alpha = int(255 * ((1 - i / self.segments) ** 2))
+            alpha = int(255 * math.exp(-2 * i / self.segments))
+            if alpha <= 0: continue
+            
+            # Tính toán vị trí đoạn đuôi thứ i
+            # (Lùi lại theo hướng ngược với vận tốc)
+            start_x = self.x - self.vx * (i * 0.8)
+            start_y = self.y - self.vy * (i * 0.8)
+            end_x = self.x - self.vx * ((i + 1) * 0.8)
+            end_y = self.y - self.vy * ((i + 1) * 0.8)
+
+            color = (180, 200, 255) # Màu xanh trắng nhạt
+            
+            # Để tối ưu, ta vẽ trực tiếp đường thẳng với độ dày giảm dần
+            width = max(1, 3 - i // 5)
+            # Giả lập mờ bằng cách trộn màu với nền đen (vì nền vũ trụ màu đen)
+            faded_color = tuple(int(c * (alpha/255)) for c in color)
+            
+            pygame.draw.line(win, faded_color, (start_x, start_y), (end_x, end_y), width)
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 SIDEBAR_ROW_H  = 24
@@ -442,29 +509,53 @@ def main():
     sun = Planet(0, 0, 18, YELLOW, 1.98892e30, "Sun")
     sun.sun = True
 
-    specs = [
-        ("Mercury",  0.387,   5, DARK_GREY,           3.30e23,  -47_400, {}),
-        ("Venus",    0.723,   9, (200,165,75),          4.87e24,  -35_020, dict(has_atm=True, atm_color=(210,170,40))),
-        ("Earth",   -1.0,    10, BLUE,                  5.97e24,   29_783, dict(has_atm=True, atm_color=(60,120,200))),
-        ("Mars",    -1.524,   7, RED,                   6.39e23,   24_077, dict(has_atm=True, atm_color=(170,70,50))),
-        ("Jupiter",  5.2,    20, (210,160,100),          1.90e27,  -13_070, dict(has_atm=True, atm_color=(200,150,90))),
-        ("Saturn",  -9.58,   17, (215,195,140),          5.68e26,    9_690, dict(has_rings=True, ring_color=(175,155,105), has_atm=True, atm_color=(195,175,115))),
-        ("Uranus",  19.2,    13, LIGHT_BLUE,             8.68e25,   -6_810, dict(has_rings=True, ring_color=(140,205,215), has_atm=True, atm_color=(95,195,215))),
-        ("Neptune",-30.05,   12, DEEP_BLUE,              1.02e26,    5_430, dict(has_atm=True, atm_color=(45,95,195))),
-    ]
+        specs = [
+    # name, a (AU), e, vis_r, color, mass, extra_parameters
+    ("Mercury",      0.387,     0.2056,     5,    DARK_GREY,       3.30e23,   {}),
+    ("Venus",        0.723,     0.0067,     9,    GOLDEN_BROWN,    4.87e24,   dict(has_atm=True, atm_color=(210,170,40))),
+    ("Earth",        1.000,     0.0167,    10,    BLUE,            5.97e24,   dict(has_atm=True, atm_color=(60,120,200))),
+    ("Mars",         1.524,     0.0934,     7,    RED,             6.39e23,   dict(has_atm=True, atm_color=(170,70,50))),
+    ("Jupiter",      5.203,     0.0484,    20,    DARK_SAND,       1.90e27,   dict(has_atm=True, atm_color=(200,150,90))),
+    ("Saturn",       9.537,     0.0541,    17,    TAN,             5.68e26,   dict(has_rings=True, ring_color=(175,155,105), has_atm=True, atm_color=(195,175,115))),
+    ("Uranus",      19.195,     0.0472,    13,    LIGHT_BLUE,      8.68e25,   dict(has_rings=True, ring_color=(140,205,215), has_atm=True, atm_color=(95,195,215))),
+    ("Neptune",     30.076,     0.0086,    12,    DEEP_BLUE,       1.02e26,   dict(has_atm=True, atm_color=(45,95,195))),
+]
 
     planets = [sun]
     non_sun = []
-    for name, x_au, rv, color, mass, yv, kw in specs:
-        p = Planet(x_au * AU, 0, rv, color, mass, name, **kw)
-        p.y_vel = float(yv)
+    # 1. Khởi tạo các hành tinh theo quỹ đạo Elip
+    for name, a_au, e, rv, color, mass, kw in specs:
+        A = a_au * AU
+        # Khoảng cách tại điểm cận nhật (trang 3 PDF)
+        rp = A * (1 - e)
+        # Vận tốc tại điểm cận nhật (trang 4 PDF - biến tấu từ công thức năng lượng)
+        vp = math.sqrt((G * sun.mass / A) * ((1 + e) / (1 - e)))
+        # 2. Chọn một góc xuất phát ngẫu nhiên (từ 0 đến 2π)
+        theta = random.uniform(0, 2 * math.pi)
+    
+        # 3. Xoay vị trí (x, y)
+        # Tại điểm cận nhật ban đầu là (rp, 0)
+        start_x = rp * math.cos(theta)
+        start_y = rp * math.sin(theta)
+    
+        # 4. Xoay véc-tơ vận tốc (vx, vy)
+        # Vận tốc tại điểm cận nhật vuông góc với bán kính. 
+        # Nếu vị trí là (cos, sin) thì hướng vuông góc sẽ là (sin, -cos) để quay ngược chiều kim đồng hồ
+        start_vx = vp * math.sin(theta)
+        start_vy = -vp * math.cos(theta)
+        p = Planet(start_x, start_y, rv, color, mass, name, **kw)
+        p.x_vel = start_vx
+        p.y_vel = start_vy
         planets.append(p)
         non_sun.append(p)
+    
+    shooting_stars = [ShootingStar() for _ in range(5)]
 
     sel       = 2       # Earth
     show_lbl  = True
     paused    = False
     mult      = 1
+    tot_seconds = 0     # Thêm biến này để lưu trữ chính xác đến từng giây
     tot_days  = 0
     hover_idx = -1      # sidebar row under mouse
 
@@ -518,11 +609,18 @@ def main():
             for _ in range(mult):
                 for p in non_sun:
                     p.update(planets)
-            tot_days += mult
+            tot_days += mult #check dòng này xem có cần giữ lại hem
+            for ss in shooting_stars:
+                ss.update()
+            seconds_per_frame = mult * TIMESTEP
+            tot_seconds += seconds_per_frame 
+            tot_days = int(tot_seconds / 86400)
 
         WIN.fill(BLACK)
         draw_stars(WIN, stars, tick)
 
+        for ss in shooting_stars:
+            ss.draw(WIN)
         for p in non_sun:
             p.draw_orbit(WIN, cam)
         for i, p in enumerate(non_sun):
