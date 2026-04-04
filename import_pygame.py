@@ -506,6 +506,12 @@ def main():
     stars = make_stars()
     tick  = 0
 
+    #This code is using for running music
+    pygame.mixer.init()
+    pygame.mixer.music.load("do mi xi.mp3")
+    pygame.mixer.music.play(-1)
+    #end
+
     sun = Planet(0, 0, 18, YELLOW, 1.98892e30, "Sun")
     sun.sun = True
 
