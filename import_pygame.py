@@ -233,7 +233,7 @@ class Planet:
             if p is self:
                 continue
         
-            # Tính lực hấp dẫn Newton: F = G*m1*m2 / r^2
+            # Calculate gravitational force
             dx = p.x - self.x
             dy = p.y - self.y
             dist_sq = dx*dx + dy*dy
@@ -246,15 +246,14 @@ class Planet:
             fx += math.cos(theta) * force
             fy += math.sin(theta) * force
     
-        # Cập nhật vận tốc và vị trí (Euler-Cromer)
+        # Update velocity and position (Euler-Cromer)
         self.x_vel += fx / self.mass * TIMESTEP
         self.y_vel += fy / self.mass * TIMESTEP
         self.speed  = math.sqrt(self.x_vel**2 + self.y_vel**2)
         self.x += self.x_vel * TIMESTEP
         self.y += self.y_vel * TIMESTEP
     
-        # Lưu quỹ đạo (giới hạn để tránh lag)
-        # Quỹ đạo tuyệt đối
+        # Save orbit trail
         self.orbit.append((self.x, self.y))
         if len(self.orbit) > 900: 
             self.orbit.pop(0)
@@ -269,15 +268,15 @@ class ShootingStar:
         self.reset()
 
     def reset(self):
-        # Xuất hiện ngẫu nhiên ở nửa trên/phải màn hình
+        # Appears randomly
         self.x = random.randint(WIDTH, WIDTH + 200)
         self.y = random.randint(-200, HEIGHT)
-        # Vận tốc nhanh và chéo
+        # For high velocity and diagonal
         self.vx = random.uniform(-20, -10) 
         self.vy = random.uniform(7, 15)
         self.active = False
         self.timer = random.randint(100, 200) 
-        # Độ dài vệt sáng (số phân đoạn đuôi)
+        # Light streak length
         self.segments = 15 
 
     def update(self):
@@ -296,15 +295,13 @@ class ShootingStar:
     def draw(self, win):
         if not self.active: return
         
-        # Vẽ đuôi mờ dần bằng cách lặp ngược từ cuối đuôi về đầu
+        # Draw a fading tail by repeating the process from the end of the tail back to the beginning.
         for i in range(self.segments):
-            # Tỷ lệ mờ: đoạn càng xa đầu sao băng càng mờ (xem xét nên giảm tuyến tính hay hàm mũ)
-            #alpha = int(255 * ((1 - i / self.segments) ** 2))
+            # Faintness scale: the further away from the meteor shower's head, the fainter it becomes.
             alpha = int(255 * math.exp(-2 * i / self.segments))
             if alpha <= 0: continue
             
-            # Tính toán vị trí đoạn đuôi thứ i
-            # (Lùi lại theo hướng ngược với vận tốc)
+            # Calculate the position of the i-th tail segment
             start_x = self.x - self.vx * (i * 0.8)
             start_y = self.y - self.vy * (i * 0.8)
             end_x = self.x - self.vx * ((i + 1) * 0.8)
@@ -312,9 +309,9 @@ class ShootingStar:
 
             color = (180, 200, 255) # Màu xanh trắng nhạt
             
-            # Để tối ưu, ta vẽ trực tiếp đường thẳng với độ dày giảm dần
+            # For optimal results, we draw the line directly with gradually decreasing thickness.
             width = max(1, 3 - i // 5)
-            # Giả lập mờ bằng cách trộn màu với nền đen (vì nền vũ trụ màu đen)
+            # Create a blur effect by blending colors with a black background (since the universe background is black).
             faded_color = tuple(int(c * (alpha/255)) for c in color)
             
             pygame.draw.line(win, faded_color, (start_x, start_y), (end_x, end_y), width)
@@ -523,24 +520,24 @@ def main():
 
     planets = [sun]
     non_sun = []
-    # 1. Khởi tạo các hành tinh theo quỹ đạo Elip
+    # 1. The planets were initially formed in elliptical orbits.
     for name, a_au, e, rv, color, mass, kw in specs:
         A = a_au * AU
-        # Khoảng cách tại điểm cận nhật (trang 3 PDF)
+        # Distance at perihelion
         rp = A * (1 - e)
-        # Vận tốc tại điểm cận nhật (trang 4 PDF - biến tấu từ công thức năng lượng)
+        # Velocity at perihelion
         vp = math.sqrt((G * sun.mass / A) * ((1 + e) / (1 - e)))
-        # 2. Chọn một góc xuất phát ngẫu nhiên (từ 0 đến 2π)
+        # 2. Choose a random starting angle. (from 0 to 2π)
         theta = random.uniform(0, 2 * math.pi)
     
-        # 3. Xoay vị trí (x, y)
-        # Tại điểm cận nhật ban đầu là (rp, 0)
+        # 3. Rotate position (x, y)
+        # At the initial perihelion point is (rp, 0)
         start_x = rp * math.cos(theta)
         start_y = rp * math.sin(theta)
     
-        # 4. Xoay véc-tơ vận tốc (vx, vy)
-        # Vận tốc tại điểm cận nhật vuông góc với bán kính. 
-        # Nếu vị trí là (cos, sin) thì hướng vuông góc sẽ là (sin, -cos) để quay ngược chiều kim đồng hồ
+        # 4. Rotate the velocity vector (vx, vy).
+        # The velocity at perihelion is perpendicular to the radius.
+        # If the position is (cos, sin), then the perpendicular direction will be (sin, -cos) to rotate counterclockwise.
         start_vx = vp * math.sin(theta)
         start_vy = -vp * math.cos(theta)
         p = Planet(start_x, start_y, rv, color, mass, name, **kw)
@@ -555,7 +552,7 @@ def main():
     show_lbl  = True
     paused    = False
     mult      = 1
-    tot_seconds = 0     # Thêm biến này để lưu trữ chính xác đến từng giây
+    tot_seconds = 0     # Add this variable to store data precisely down to the second.
     tot_days  = 0
     hover_idx = -1      # sidebar row under mouse
 
@@ -609,7 +606,6 @@ def main():
             for _ in range(mult):
                 for p in non_sun:
                     p.update(planets)
-            tot_days += mult #check dòng này xem có cần giữ lại hem
             for ss in shooting_stars:
                 ss.update()
             seconds_per_frame = mult * TIMESTEP
